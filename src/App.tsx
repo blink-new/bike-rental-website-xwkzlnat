@@ -11,10 +11,12 @@ import MyRentals from './pages/MyRentals'
 import AdminDashboard from './pages/AdminDashboard'
 import BikeManagement from './pages/BikeManagement'
 import BookingManagement from './pages/BookingManagement'
+import AdminSetup from './pages/AdminSetup'
 
 // Components
 import Header from './components/Header'
 import LoadingScreen from './components/LoadingScreen'
+import AdminRoute from './components/AdminRoute'
 
 interface User {
   id: string
@@ -83,13 +85,22 @@ function App() {
             <Route path="/browse" element={<BrowseBikes />} />
             <Route path="/booking/:bikeId" element={<BookingPage />} />
             <Route path="/my-rentals" element={<MyRentals user={user} />} />
-            {isAdmin && (
-              <>
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/bikes" element={<BikeManagement />} />
-                <Route path="/admin/bookings" element={<BookingManagement />} />
-              </>
-            )}
+            <Route path="/admin-setup" element={<AdminSetup user={user} />} />
+            <Route path="/admin" element={
+              <AdminRoute isAdmin={isAdmin}>
+                <AdminDashboard />
+              </AdminRoute>
+            } />
+            <Route path="/admin/bikes" element={
+              <AdminRoute isAdmin={isAdmin}>
+                <BikeManagement />
+              </AdminRoute>
+            } />
+            <Route path="/admin/bookings" element={
+              <AdminRoute isAdmin={isAdmin}>
+                <BookingManagement />
+              </AdminRoute>
+            } />
           </Routes>
         </main>
         <Toaster />

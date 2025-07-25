@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Bike, User, LogOut, Settings } from 'lucide-react'
+import { Bike, User, LogOut, Settings, Shield } from 'lucide-react'
 import { blink } from '../blink/client'
 import {
   DropdownMenu,
@@ -99,6 +99,17 @@ export default function Header({ user, isAdmin }: HeaderProps) {
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </DropdownMenuItem>
+              {!isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin-setup">
+                      <Shield className="mr-2 h-4 w-4" />
+                      <span>Admin Access</span>
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
