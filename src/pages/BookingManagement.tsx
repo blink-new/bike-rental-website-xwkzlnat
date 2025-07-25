@@ -1,10 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Check, X, Phone, Mail, Calendar, Clock, MessageCircle } from 'lucide-react'
+import { Check, X, Phone, Mail, Calendar, Clock, MessageCircle, Truck, RotateCcw, Hash, Edit3 } from 'lucide-react'
 import { blink } from '../blink/client'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { useToast } from '../hooks/use-toast'
 
 interface Booking {
@@ -21,6 +25,12 @@ interface Booking {
   customerPhone: string
   notes: string
   createdAt: string
+  bikeNumber?: string
+  deliveryStatus?: string
+  returnStatus?: string
+  deliveredAt?: string
+  returnedAt?: string
+  assignedByAdmin?: string
 }
 
 interface Bike {
@@ -28,6 +38,7 @@ interface Bike {
   name: string
   type: string
   imageUrl: string
+  bikeNumber?: string
 }
 
 interface BookingWithBike extends Booking {
@@ -38,6 +49,11 @@ export default function BookingManagement() {
   const [bookings, setBookings] = useState<BookingWithBike[]>([])
   const [loading, setLoading] = useState(true)
   const [processingBookings, setProcessingBookings] = useState<Set<string>>(new Set())
+  const [selectedBooking, setSelectedBooking] = useState<BookingWithBike | null>(null)
+  const [bikeNumberInput, setBikeNumberInput] = useState('')
+  const [deliveryStatusInput, setDeliveryStatusInput] = useState('')
+  const [returnStatusInput, setReturnStatusInput] = useState('')
+  const [dialogOpen, setDialogOpen] = useState(false)
   const { toast } = useToast()
 
   const loadBookings = useCallback(async () => {
@@ -77,13 +93,24 @@ export default function BookingManagement() {
     }
   }, [toast])
 
-  const sendNotifications = async (booking: BookingWithBike, action: 'approve' | 'reject') => {
+  const sendNotifications = async (booking: BookingWithBike, action: 'approve' | 'reject' | 'delivered' | 'returned') => {
     // Simulate WhatsApp and Email notifications
-    // In a real implementation, you would use actual notification services
+    let message = ''
     
-    const message = action === 'approve' 
-      ? `Great news! Your bike rental for ${booking.bike?.name} has been approved. Pickup details will be sent shortly.`
-      : `We're sorry, but your bike rental request for ${booking.bike?.name} has been declined. Please contact us for more information.`
+    switch (action) {
+      case 'approve':
+        message = `Great news! Your bike rental for ${booking.bike?.name} has been approved. ${booking.bikeNumber ? `Bike Number: ${booking.bikeNumber}. ` : ''}Pickup details will be sent shortly.`
+        break
+      case 'reject':
+        message = `We're sorry, but your bike rental request for ${booking.bike?.name} has been declined. Please contact us for more information.`
+        break
+      case 'delivered':
+        message = `Your bike ${booking.bike?.name} (${booking.bikeNumber}) has been delivered! Enjoy your ride and remember to return it on time.`
+        break
+      case 'returned':
+        message = `Thank you for returning the bike ${booking.bike?.name} (${booking.bikeNumber}). Your rental is now complete!`
+        break
+    }
 
     console.log('Sending WhatsApp to:', booking.customerPhone, message)
     console.log('Sending Email to:', booking.customerEmail, message)
@@ -107,11 +134,8 @@ export default function BookingManagement() {
         updatedAt: new Date().toISOString()
       })
 
-      // Here you would typically send WhatsApp/Email notifications
-      // For now, we'll just show a success message
       const booking = bookings.find(b => b.id === bookingId)
       if (booking) {
-        // Simulate sending notifications
         await sendNotifications(booking, action)
       }
 
@@ -137,6 +161,71 @@ export default function BookingManagement() {
     }
   }
 
+  const handleStatusUpdate = async (type: 'delivery' | 'return') => {
+    if (!selectedBooking) return
+
+    setProcessingBookings(prev => new Set(prev).add(selectedBooking.id))
+    
+    try {
+      const updateData: any = {
+        updatedAt: new Date().toISOString()
+      }
+
+      if (type === 'delivery') {
+        updateData.deliveryStatus = deliveryStatusInput
+        if (deliveryStatusInput === 'delivered') {
+          updateData.deliveredAt = new Date().toISOString()
+        }
+        if (bikeNumberInput) {
+          updateData.bikeNumber = bikeNumberInput
+        }
+      } else {
+        updateData.returnStatus = returnStatusInput
+        if (returnStatusInput === 'returned') {
+          updateData.returnedAt = new Date().toISOString()
+          updateData.status = 'completed'
+        }
+      }
+
+      await blink.db.bookings.update(selectedBooking.id, updateData)
+
+      // Send notification if status changed to delivered or returned
+      if ((type === 'delivery' && deliveryStatusInput === 'delivered') || 
+          (type === 'return' && returnStatusInput === 'returned')) {
+        await sendNotifications(selectedBooking, type === 'delivery' ? 'delivered' : 'returned')
+      }
+
+      toast({
+        title: "Success",
+        description: `${type === 'delivery' ? 'Delivery' : 'Return'} status updated successfully!`
+      })
+
+      setDialogOpen(false)
+      loadBookings()
+    } catch (error) {
+      console.error(`Error updating ${type} status:`, error)
+      toast({
+        title: "Error",
+        description: `Failed to update ${type} status.`,
+        variant: "destructive"
+      })
+    } finally {
+      setProcessingBookings(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(selectedBooking.id)
+        return newSet
+      })
+    }
+  }
+
+  const openStatusDialog = (booking: BookingWithBike) => {
+    setSelectedBooking(booking)
+    setBikeNumberInput(booking.bikeNumber || '')
+    setDeliveryStatusInput(booking.deliveryStatus || 'pending')
+    setReturnStatusInput(booking.returnStatus || 'not_returned')
+    setDialogOpen(true)
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved':
@@ -149,6 +238,32 @@ export default function BookingManagement() {
         return 'bg-blue-100 text-blue-800'
       case 'cancelled':
         return 'bg-gray-100 text-gray-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getDeliveryStatusColor = (status: string) => {
+    switch (status) {
+      case 'delivered':
+        return 'bg-green-100 text-green-800'
+      case 'in_transit':
+        return 'bg-blue-100 text-blue-800'
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getReturnStatusColor = (status: string) => {
+    switch (status) {
+      case 'returned':
+        return 'bg-green-100 text-green-800'
+      case 'overdue':
+        return 'bg-red-100 text-red-800'
+      case 'not_returned':
+        return 'bg-yellow-100 text-yellow-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -189,6 +304,7 @@ export default function BookingManagement() {
   const pendingBookings = filterBookings('pending')
   const approvedBookings = filterBookings('approved')
   const rejectedBookings = filterBookings('rejected')
+  const completedBookings = filterBookings('completed')
 
   if (loading) {
     return (
@@ -207,11 +323,11 @@ export default function BookingManagement() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Booking Management</h1>
-          <p className="text-lg text-gray-600">Review and manage bike rental requests</p>
+          <p className="text-lg text-gray-600">Review and manage bike rental requests with delivery tracking</p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center">
@@ -261,6 +377,20 @@ export default function BookingManagement() {
                   <Calendar className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-2xl font-bold text-gray-900">{completedBookings.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Truck className="h-6 w-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Total</p>
                   <p className="text-2xl font-bold text-gray-900">{bookings.length}</p>
                 </div>
@@ -271,9 +401,10 @@ export default function BookingManagement() {
 
         {/* Bookings Tabs */}
         <Tabs defaultValue="pending" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="pending">Pending ({pendingBookings.length})</TabsTrigger>
             <TabsTrigger value="approved">Approved ({approvedBookings.length})</TabsTrigger>
+            <TabsTrigger value="completed">Completed ({completedBookings.length})</TabsTrigger>
             <TabsTrigger value="rejected">Rejected ({rejectedBookings.length})</TabsTrigger>
             <TabsTrigger value="all">All ({bookings.length})</TabsTrigger>
           </TabsList>
@@ -282,9 +413,12 @@ export default function BookingManagement() {
             <BookingsList 
               bookings={pendingBookings} 
               getStatusColor={getStatusColor} 
+              getDeliveryStatusColor={getDeliveryStatusColor}
+              getReturnStatusColor={getReturnStatusColor}
               getStatusText={getStatusText} 
               formatDate={formatDate}
               onBookingAction={handleBookingAction}
+              onStatusUpdate={openStatusDialog}
               processingBookings={processingBookings}
               showActions={true}
             />
@@ -294,9 +428,27 @@ export default function BookingManagement() {
             <BookingsList 
               bookings={approvedBookings} 
               getStatusColor={getStatusColor} 
+              getDeliveryStatusColor={getDeliveryStatusColor}
+              getReturnStatusColor={getReturnStatusColor}
               getStatusText={getStatusText} 
               formatDate={formatDate}
               onBookingAction={handleBookingAction}
+              onStatusUpdate={openStatusDialog}
+              processingBookings={processingBookings}
+              showStatusUpdate={true}
+            />
+          </TabsContent>
+
+          <TabsContent value="completed">
+            <BookingsList 
+              bookings={completedBookings} 
+              getStatusColor={getStatusColor} 
+              getDeliveryStatusColor={getDeliveryStatusColor}
+              getReturnStatusColor={getReturnStatusColor}
+              getStatusText={getStatusText} 
+              formatDate={formatDate}
+              onBookingAction={handleBookingAction}
+              onStatusUpdate={openStatusDialog}
               processingBookings={processingBookings}
             />
           </TabsContent>
@@ -305,9 +457,12 @@ export default function BookingManagement() {
             <BookingsList 
               bookings={rejectedBookings} 
               getStatusColor={getStatusColor} 
+              getDeliveryStatusColor={getDeliveryStatusColor}
+              getReturnStatusColor={getReturnStatusColor}
               getStatusText={getStatusText} 
               formatDate={formatDate}
               onBookingAction={handleBookingAction}
+              onStatusUpdate={openStatusDialog}
               processingBookings={processingBookings}
             />
           </TabsContent>
@@ -316,13 +471,94 @@ export default function BookingManagement() {
             <BookingsList 
               bookings={bookings} 
               getStatusColor={getStatusColor} 
+              getDeliveryStatusColor={getDeliveryStatusColor}
+              getReturnStatusColor={getReturnStatusColor}
               getStatusText={getStatusText} 
               formatDate={formatDate}
               onBookingAction={handleBookingAction}
+              onStatusUpdate={openStatusDialog}
               processingBookings={processingBookings}
+              showStatusUpdate={true}
             />
           </TabsContent>
         </Tabs>
+
+        {/* Status Update Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Update Booking Status</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {selectedBooking && (
+                <>
+                  <div>
+                    <h4 className="font-medium mb-2">{selectedBooking.bike?.name}</h4>
+                    <p className="text-sm text-gray-600">Customer: {selectedBooking.customerName}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="bikeNumber">Bike Number</Label>
+                    <Input
+                      id="bikeNumber"
+                      value={bikeNumberInput}
+                      onChange={(e) => setBikeNumberInput(e.target.value)}
+                      placeholder="Enter bike number (e.g., BK001)"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="deliveryStatus">Delivery Status</Label>
+                    <Select value={deliveryStatusInput} onValueChange={setDeliveryStatusInput}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="in_transit">In Transit</SelectItem>
+                        <SelectItem value="delivered">Delivered</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="returnStatus">Return Status</Label>
+                    <Select value={returnStatusInput} onValueChange={setReturnStatusInput}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="not_returned">Not Returned</SelectItem>
+                        <SelectItem value="overdue">Overdue</SelectItem>
+                        <SelectItem value="returned">Returned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <Button 
+                      onClick={() => handleStatusUpdate('delivery')}
+                      disabled={processingBookings.has(selectedBooking.id)}
+                      className="flex-1"
+                    >
+                      <Truck className="h-4 w-4 mr-2" />
+                      Update Delivery
+                    </Button>
+                    <Button 
+                      onClick={() => handleStatusUpdate('return')}
+                      disabled={processingBookings.has(selectedBooking.id)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Update Return
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
@@ -331,21 +567,29 @@ export default function BookingManagement() {
 interface BookingsListProps {
   bookings: BookingWithBike[]
   getStatusColor: (status: string) => string
+  getDeliveryStatusColor: (status: string) => string
+  getReturnStatusColor: (status: string) => string
   getStatusText: (status: string) => string
   formatDate: (dateString: string) => string
   onBookingAction: (bookingId: string, action: 'approve' | 'reject') => void
+  onStatusUpdate: (booking: BookingWithBike) => void
   processingBookings: Set<string>
   showActions?: boolean
+  showStatusUpdate?: boolean
 }
 
 function BookingsList({ 
   bookings, 
   getStatusColor, 
+  getDeliveryStatusColor,
+  getReturnStatusColor,
   getStatusText, 
   formatDate, 
   onBookingAction, 
+  onStatusUpdate,
   processingBookings,
-  showActions = false 
+  showActions = false,
+  showStatusUpdate = false
 }: BookingsListProps) {
   if (bookings.length === 0) {
     return (
@@ -369,11 +613,31 @@ function BookingsList({
                 </CardTitle>
                 <p className="text-sm text-gray-600">
                   {booking.bike?.type} • Booking #{booking.id.slice(-8)}
+                  {booking.bikeNumber && (
+                    <span className="ml-2 inline-flex items-center">
+                      <Hash className="h-3 w-3 mr-1" />
+                      {booking.bikeNumber}
+                    </span>
+                  )}
                 </p>
               </div>
-              <Badge className={getStatusColor(booking.status)}>
-                {getStatusText(booking.status)}
-              </Badge>
+              <div className="flex flex-col gap-2">
+                <Badge className={getStatusColor(booking.status)}>
+                  {getStatusText(booking.status)}
+                </Badge>
+                {booking.deliveryStatus && (
+                  <Badge className={getDeliveryStatusColor(booking.deliveryStatus)}>
+                    <Truck className="h-3 w-3 mr-1" />
+                    {booking.deliveryStatus.replace('_', ' ')}
+                  </Badge>
+                )}
+                {booking.returnStatus && booking.returnStatus !== 'not_returned' && (
+                  <Badge className={getReturnStatusColor(booking.returnStatus)}>
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    {booking.returnStatus.replace('_', ' ')}
+                  </Badge>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -402,6 +666,16 @@ function BookingsList({
                 <div className="text-sm">
                   <span className="font-medium">Type:</span> {booking.bookingType === 'instant' ? 'Instant' : 'Pre-Reservation'}
                 </div>
+                {booking.deliveredAt && (
+                  <div className="text-sm text-green-600">
+                    <span className="font-medium">Delivered:</span> {formatDate(booking.deliveredAt)}
+                  </div>
+                )}
+                {booking.returnedAt && (
+                  <div className="text-sm text-blue-600">
+                    <span className="font-medium">Returned:</span> {formatDate(booking.returnedAt)}
+                  </div>
+                )}
               </div>
 
               {/* Customer Info */}
@@ -433,28 +707,42 @@ function BookingsList({
                   Booked {formatDate(booking.createdAt)}
                 </div>
                 
-                {showActions && booking.status === 'pending' && (
-                  <div className="flex gap-2 mt-4">
+                <div className="flex flex-col gap-2 mt-4">
+                  {showActions && booking.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => onBookingAction(booking.id, 'approve')}
+                        disabled={processingBookings.has(booking.id)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        {processingBookings.has(booking.id) ? 'Processing...' : 'Approve'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => onBookingAction(booking.id, 'reject')}
+                        disabled={processingBookings.has(booking.id)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {(showStatusUpdate || booking.status === 'approved') && booking.status !== 'rejected' && (
                     <Button
                       size="sm"
-                      onClick={() => onBookingAction(booking.id, 'approve')}
-                      disabled={processingBookings.has(booking.id)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      {processingBookings.has(booking.id) ? 'Processing...' : 'Approve'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => onBookingAction(booking.id, 'reject')}
+                      variant="outline"
+                      onClick={() => onStatusUpdate(booking)}
                       disabled={processingBookings.has(booking.id)}
                     >
-                      <X className="h-4 w-4 mr-1" />
-                      Reject
+                      <Edit3 className="h-4 w-4 mr-1" />
+                      Update Status
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 

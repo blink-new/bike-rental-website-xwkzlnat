@@ -45,6 +45,7 @@ export default function BikeManagement() {
     hourlyRate: '',
     dailyRate: '',
     imageUrl: '',
+    bikeNumber: '',
     isAvailable: true
   })
 
@@ -80,6 +81,7 @@ export default function BikeManagement() {
       hourlyRate: '',
       dailyRate: '',
       imageUrl: '',
+      bikeNumber: '',
       isAvailable: true
     })
   }
@@ -96,6 +98,7 @@ export default function BikeManagement() {
         hourlyRate: parseFloat(formData.hourlyRate),
         dailyRate: parseFloat(formData.dailyRate),
         imageUrl: formData.imageUrl,
+        bikeNumber: formData.bikeNumber,
         isAvailable: formData.isAvailable ? 1 : 0
       })
 
@@ -126,6 +129,7 @@ export default function BikeManagement() {
       hourlyRate: bike.hourlyRate.toString(),
       dailyRate: bike.dailyRate.toString(),
       imageUrl: bike.imageUrl,
+      bikeNumber: (bike as any).bikeNumber || '',
       isAvailable: Number(bike.isAvailable) > 0
     })
   }
@@ -141,6 +145,7 @@ export default function BikeManagement() {
         hourlyRate: parseFloat(formData.hourlyRate),
         dailyRate: parseFloat(formData.dailyRate),
         imageUrl: formData.imageUrl,
+        bikeNumber: formData.bikeNumber,
         isAvailable: formData.isAvailable ? 1 : 0,
         updatedAt: new Date().toISOString()
       })
@@ -260,6 +265,17 @@ export default function BikeManagement() {
         />
       </div>
 
+      <div>
+        <Label htmlFor="bikeNumber">Bike Number</Label>
+        <Input
+          id="bikeNumber"
+          value={formData.bikeNumber}
+          onChange={(e) => setFormData({ ...formData, bikeNumber: e.target.value })}
+          placeholder="e.g., BK001, MT-001, etc."
+        />
+        <p className="text-sm text-gray-500 mt-1">Unique identifier for this specific bike</p>
+      </div>
+
       <div className="flex items-center space-x-2">
         <Switch
           id="isAvailable"
@@ -366,6 +382,9 @@ export default function BikeManagement() {
                   
                   <CardContent className="p-6">
                     <h3 className="text-xl font-semibold mb-2">{bike.name}</h3>
+                    {(bike as any).bikeNumber && (
+                      <p className="text-sm text-blue-600 font-medium mb-2">#{(bike as any).bikeNumber}</p>
+                    )}
                     <p className="text-gray-600 mb-4 text-sm line-clamp-2">{bike.description}</p>
                     
                     <div className="flex justify-between items-center mb-4">
