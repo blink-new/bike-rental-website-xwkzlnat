@@ -32,7 +32,7 @@ export default function AdminSetup({ user }: AdminSetupProps) {
   useEffect(() => {
     const checkExistingAdmins = async () => {
       try {
-        const admins = await blink.db.adminUsers.list()
+        const admins = await blink.db.admin_users.list()
         setHasAdmins(admins.length > 0)
       } catch (error) {
         console.error('Error checking admins:', error)
@@ -59,10 +59,9 @@ export default function AdminSetup({ user }: AdminSetupProps) {
     setIsLoading(true)
     try {
       // Add current user as admin
-      await blink.db.adminUsers.create({
-        userId: user.id,
-        email: user.email,
-        createdBy: user.id
+      await blink.db.admin_users.create({
+        user_id: user.id,
+        role: 'admin'
       })
 
       toast({
@@ -88,8 +87,8 @@ export default function AdminSetup({ user }: AdminSetupProps) {
     setIsLoading(true)
     try {
       // Check if user is already admin
-      const existingAdmin = await blink.db.adminUsers.list({
-        where: { userId: user.id }
+      const existingAdmin = await blink.db.admin_users.list({
+        where: { user_id: user.id }
       })
 
       if (existingAdmin.length > 0) {
@@ -102,10 +101,9 @@ export default function AdminSetup({ user }: AdminSetupProps) {
       }
 
       // Add user as admin (if admins already exist, this might need approval)
-      await blink.db.adminUsers.create({
-        userId: user.id,
-        email: user.email,
-        createdBy: user.id
+      await blink.db.admin_users.create({
+        user_id: user.id,
+        role: 'admin'
       })
 
       toast({

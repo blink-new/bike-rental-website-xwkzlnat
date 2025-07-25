@@ -31,8 +31,8 @@ function App() {
 
   const checkAdminStatus = async (userId: string) => {
     try {
-      const adminUsers = await blink.db.adminUsers.list({
-        where: { userId: userId }
+      const adminUsers = await blink.db.admin_users.list({
+        where: { user_id: userId }
       })
       setIsAdmin(adminUsers.length > 0)
     } catch (error) {
